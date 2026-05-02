@@ -1,4 +1,4 @@
-/* global Phaser */
+import Phaser from 'phaser';
 import {
   TRAITS,
   HAIR_COLORS,
@@ -6,23 +6,43 @@ import {
   EYE_COLORS,
   TOP_COLORS,
   BOTTOM_COLORS,
-} from './CharacterSelectScene.js';
+} from './CharacterSelectScene';
 
 // Offset used to convert the sitting character's head-centre Y back to the
 // "feet-level baseY" coordinate system that _drawHair expects.
 // Derived from CharacterSelectScene: head centre = baseY − 265.
 const HEAD_TO_BASE_OFFSET = 265;
 
+type DPadDirection = 'up' | 'down' | 'left' | 'right';
+
+interface CouchDimensions {
+  floorY: number;
+  couchW: number;
+  cx: number;
+  armW: number;
+  seatH: number;
+  backH: number;
+  seatY: number;
+}
+
 export class LivingRoomScene extends Phaser.Scene {
+  private _sel: Record<string, number> = {};
+  private _charG!: Phaser.GameObjects.Graphics;
+  private _accG!: Phaser.GameObjects.Graphics;
+  private _cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private _dpadState: Record<DPadDirection, boolean> = { up: false, down: false, left: false, right: false };
+  private _dpadElements: Phaser.GameObjects.GameObject[] = [];
+  private _dpadResizeTimer: ReturnType<typeof setTimeout> | null = null;
+
   constructor() {
     super({ key: 'LivingRoomScene' });
   }
 
-  init(data) {
-    this._sel = data || {};
+  init(data: Record<string, number>): void {
+    this._sel = data ?? {};
   }
 
-  create() {
+  create(): void {
     const W = this.scale.width;
     const H = this.scale.height;
 
@@ -66,13 +86,12 @@ export class LivingRoomScene extends Phaser.Scene {
     btn.on('pointerover', () => btn.setStyle({ backgroundColor: '#7a5fc0' }));
     btn.on('pointerout', () => btn.setStyle({ backgroundColor: '#5a3fa0' }));
     btn.on('pointerdown', () => {
-      // Preserve selections so the character creator restores them
       this.registry.set('_selections', { ...this._sel });
       this.scene.start('CharacterSelectScene');
     });
 
     // Keyboard arrow keys
-    this._cursors = this.input.keyboard.createCursorKeys();
+    this._cursors = this.input.keyboard!.createCursorKeys();
 
     // D-pad touch state
     this._dpadState = { up: false, down: false, left: false, right: false };
@@ -80,9 +99,8 @@ export class LivingRoomScene extends Phaser.Scene {
     this._createDPad(W, H);
 
     // Reposition D-pad when the viewport changes (orientation change, browser chrome).
-    // Debounced to avoid creating multiple D-pads during rapid resize events.
     this._dpadResizeTimer = null;
-    this.scale.on('resize', (gameSize) => {
+    this.scale.on('resize', (gameSize: Phaser.Structs.Size) => {
       if (this._dpadResizeTimer) clearTimeout(this._dpadResizeTimer);
       this._dpadResizeTimer = setTimeout(() => {
         this._dpadElements.forEach(el => el.destroy());
@@ -102,7 +120,7 @@ export class LivingRoomScene extends Phaser.Scene {
     });
   }
 
-  update() {
+  update(): void {
     const speed = 3;
     let dx = 0;
     let dy = 0;
@@ -124,13 +142,10 @@ export class LivingRoomScene extends Phaser.Scene {
     }
   }
 
-  _createDPad(W, H) {
+  private _createDPad(W: number, H: number): void {
     const btnSize = 50;
     const padX = 24;
-    // Use a larger bottom padding (game units = CSS px at 1:1 scale in RESIZE
-    // mode) so the D-pad stays fully visible above browser chrome on mobile
-    // devices (iOS home indicator ~34 px, Android nav bar ~56 px).
-    // 80 px gives comfortable clearance on all common devices.
+    // 80 px gives comfortable clearance above browser chrome on all common devices.
     const padY = 80;
     const cx = padX + btnSize * 1.5;
     const cy = H - padY - btnSize * 1.5;
@@ -142,7 +157,7 @@ export class LivingRoomScene extends Phaser.Scene {
     bg.setDepth(9);
     this._dpadElements.push(bg);
 
-    const dirs = [
+    const dirs: Array<{ key: DPadDirection; label: string; ox: number; oy: number }> = [
       { key: 'up',    label: '▲', ox: 0,        oy: -btnSize },
       { key: 'down',  label: '▼', ox: 0,        oy:  btnSize },
       { key: 'left',  label: '◀', ox: -btnSize, oy: 0 },
@@ -163,11 +178,11 @@ export class LivingRoomScene extends Phaser.Scene {
         .setAlpha(0.85)
         .setDepth(10);
 
-      btn.on('pointerdown',     () => { this._dpadState[key] = true;  btn.setAlpha(1); });
-      btn.on('pointerup',       () => { this._dpadState[key] = false; btn.setAlpha(0.85); });
-      btn.on('pointerupoutside',() => { this._dpadState[key] = false; btn.setAlpha(0.85); });
-      btn.on('pointerout',      () => { this._dpadState[key] = false; btn.setAlpha(0.85); });
-      btn.on('pointerover',     () => btn.setAlpha(1));
+      btn.on('pointerdown',      () => { this._dpadState[key] = true;  btn.setAlpha(1); });
+      btn.on('pointerup',        () => { this._dpadState[key] = false; btn.setAlpha(0.85); });
+      btn.on('pointerupoutside', () => { this._dpadState[key] = false; btn.setAlpha(0.85); });
+      btn.on('pointerout',       () => { this._dpadState[key] = false; btn.setAlpha(0.85); });
+      btn.on('pointerover',      () => btn.setAlpha(1));
 
       this._dpadElements.push(btn);
     });
@@ -176,25 +191,25 @@ export class LivingRoomScene extends Phaser.Scene {
   // ---------------------------------------------------------------------------
   // Shared couch geometry (keeps everything in sync)
   // ---------------------------------------------------------------------------
-  _couchDimensions(W, H) {
+  private _couchDimensions(W: number, H: number): CouchDimensions {
     const floorY = Math.round(H * 0.72);
     const couchW = Math.min(420, Math.round(W * 0.78));
     const cx = Math.round(W / 2);
     const armW = Math.round(couchW * 0.1);
     const seatH = 36;
     const backH = 110;
-    const seatY = floorY - seatH - 12; // top of seat cushion
+    const seatY = floorY - seatH - 12;
     return { floorY, couchW, cx, armW, seatH, backH, seatY };
   }
 
   // ---------------------------------------------------------------------------
   // Room background (wall, floor, window, TV, lamp, rug, couch back)
   // ---------------------------------------------------------------------------
-  _drawRoom(g, W, H) {
+  private _drawRoom(g: Phaser.GameObjects.Graphics, W: number, H: number): void {
     const { floorY } = this._couchDimensions(W, H);
 
     // ── Wall ──────────────────────────────────────────────────────────────────
-    g.fillStyle(0xf2e4c8); // warm cream
+    g.fillStyle(0xf2e4c8);
     g.fillRect(0, 0, W, floorY);
 
     // Crown moulding strip at ceiling
@@ -206,7 +221,7 @@ export class LivingRoomScene extends Phaser.Scene {
     g.fillRect(0, floorY - 16, W, 16);
 
     // ── Floor ─────────────────────────────────────────────────────────────────
-    g.fillStyle(0xb87a2a); // hardwood
+    g.fillStyle(0xb87a2a);
     g.fillRect(0, floorY, W, H - floorY);
 
     // Plank lines
@@ -230,10 +245,9 @@ export class LivingRoomScene extends Phaser.Scene {
 
     // Curtains (drawn before frame so frame sits on top)
     g.fillStyle(0xc05030);
-    // left curtain
     g.fillTriangle(
-      winCX - winW / 2 - 2, winTop - 4,
-      winCX - winW / 2 - 2, winTop + winH + 8,
+      winCX - winW / 2 - 2,  winTop - 4,
+      winCX - winW / 2 - 2,  winTop + winH + 8,
       winCX - winW / 2 - 30, winTop - 4
     );
     g.fillTriangle(
@@ -241,10 +255,9 @@ export class LivingRoomScene extends Phaser.Scene {
       winCX - winW / 2 - 30, winTop - 4,
       winCX - winW / 2 - 30, winTop + winH + 8
     );
-    // right curtain
     g.fillTriangle(
-      winCX + winW / 2 + 2, winTop - 4,
-      winCX + winW / 2 + 2, winTop + winH + 8,
+      winCX + winW / 2 + 2,  winTop - 4,
+      winCX + winW / 2 + 2,  winTop + winH + 8,
       winCX + winW / 2 + 30, winTop - 4
     );
     g.fillTriangle(
@@ -277,24 +290,19 @@ export class LivingRoomScene extends Phaser.Scene {
     const tvH = 88;
     const tvTop = 85;
 
-    // Stand pole + base
     g.fillStyle(0x888888);
     g.fillRect(tvCX - 4, tvTop + tvH + 8, 8, 26);
     g.fillEllipse(tvCX, tvTop + tvH + 36, 36, 10);
 
-    // TV bezel
     g.fillStyle(0x1c1c1c);
     g.fillRect(tvCX - tvW / 2 - 8, tvTop - 8, tvW + 16, tvH + 16);
 
-    // TV screen
     g.fillStyle(0x0d1b2a);
     g.fillRect(tvCX - tvW / 2, tvTop, tvW, tvH);
 
-    // Screen slight blue glow (top-left brighter area)
     g.fillStyle(0x1a3a5c);
     g.fillRect(tvCX - tvW / 2, tvTop, tvW / 2, tvH / 2);
 
-    // Small reflection glint
     g.fillStyle(0xffffff);
     g.fillRect(tvCX - tvW / 2 + 6, tvTop + 6, 18, 10);
 
@@ -306,7 +314,6 @@ export class LivingRoomScene extends Phaser.Scene {
     g.fillEllipse(lampX, lampBaseY, 32, 12);
     g.fillRect(lampX - 4, lampBaseY - 155, 8, 155);
 
-    // Lampshade
     g.fillStyle(0xf0c86a);
     g.fillTriangle(
       lampX - 30, lampBaseY - 157,
@@ -314,7 +321,6 @@ export class LivingRoomScene extends Phaser.Scene {
       lampX,      lampBaseY - 215
     );
 
-    // Warm glow halo
     g.fillStyle(0xffee88);
     g.fillCircle(lampX, lampBaseY - 178, 26);
     g.setAlpha(0.12);
@@ -336,7 +342,7 @@ export class LivingRoomScene extends Phaser.Scene {
   }
 
   // ── Couch back (drawn before character) ──────────────────────────────────────
-  _drawCouchBack(g, W, H) {
+  private _drawCouchBack(g: Phaser.GameObjects.Graphics, W: number, H: number): void {
     const { couchW, cx, armW, seatH, backH, seatY } = this._couchDimensions(W, H);
     const couchX = cx - couchW / 2;
 
@@ -345,90 +351,78 @@ export class LivingRoomScene extends Phaser.Scene {
     const couchLight = 0xa06828;
     const cushionC   = 0x8b5a20;
 
-    // Back panel
     g.fillStyle(couchMain);
     g.fillRect(couchX, seatY - backH, couchW, backH);
 
-    // Back top trim edge
     g.fillStyle(couchDark);
     g.fillRect(couchX, seatY - backH, couchW, 10);
 
-    // Back cushion panel dividers (thirds)
     const third = Math.round(couchW / 3);
     g.fillStyle(couchDark);
     g.fillRect(couchX + third - 2,     seatY - backH + 10, 4, backH - 10);
     g.fillRect(couchX + third * 2 - 2, seatY - backH + 10, 4, backH - 10);
 
-    // Seat cushion surface
     g.fillStyle(cushionC);
     g.fillRect(couchX + armW, seatY, couchW - armW * 2, seatH);
 
-    // Seat center divider
     g.fillStyle(couchDark);
     g.fillRect(cx - 2, seatY, 4, seatH);
 
-    // Armrests (sides)
     g.fillStyle(couchMain);
-    g.fillRect(couchX,                  seatY - backH, armW, backH + seatH);
-    g.fillRect(couchX + couchW - armW,  seatY - backH, armW, backH + seatH);
+    g.fillRect(couchX,                 seatY - backH, armW, backH + seatH);
+    g.fillRect(couchX + couchW - armW, seatY - backH, armW, backH + seatH);
 
-    // Armrest top rounded highlights
     g.fillStyle(couchLight);
-    g.fillEllipse(couchX + armW / 2,              seatY - backH, armW + 6, 14);
-    g.fillEllipse(couchX + couchW - armW / 2,     seatY - backH, armW + 6, 14);
+    g.fillEllipse(couchX + armW / 2,          seatY - backH, armW + 6, 14);
+    g.fillEllipse(couchX + couchW - armW / 2, seatY - backH, armW + 6, 14);
   }
 
   // ── Couch front face (drawn on top of character to show seat edge) ─────────
-  _drawCouchFront(g, W, H) {
+  private _drawCouchFront(g: Phaser.GameObjects.Graphics, W: number, H: number): void {
     const { floorY, couchW, cx, armW, seatH, seatY } = this._couchDimensions(W, H);
     const couchX = cx - couchW / 2;
 
     const couchDark = 0x5a380d;
 
-    // Front seat face (visible edge below cushion top)
     g.fillStyle(couchDark);
     g.fillRect(couchX + armW, seatY + seatH, couchW - armW * 2, 20);
 
-    // Armrest front faces
     g.fillStyle(0x4a2d0d);
     g.fillRect(couchX,                 seatY + seatH, armW, 20);
     g.fillRect(couchX + couchW - armW, seatY + seatH, armW, 20);
 
-    // Short couch legs
     g.fillStyle(0x3e2408);
-    g.fillRect(couchX + armW + 8,            floorY - 14, 14, 14);
-    g.fillRect(couchX + couchW - armW - 22,  floorY - 14, 14, 14);
+    g.fillRect(couchX + armW + 8,           floorY - 14, 14, 14);
+    g.fillRect(couchX + couchW - armW - 22, floorY - 14, 14, 14);
   }
 
   // ---------------------------------------------------------------------------
   // Sitting character
   // ---------------------------------------------------------------------------
-  _drawSittingCharacter(g, ag, W, H) {
+  private _drawSittingCharacter(g: Phaser.GameObjects.Graphics, ag: Phaser.GameObjects.Graphics, W: number, H: number): void {
     const { seatY, cx } = this._couchDimensions(W, H);
     const sel = this._sel;
 
-    const hairStyleOpt = TRAITS[0].options[sel.hairStyle ?? 0];
-    const hairColor    = HAIR_COLORS[TRAITS[1].options[sel.hairColor ?? 0]];
-    const skinColor    = SKIN_TONES[TRAITS[2].options[sel.skinTone ?? 0]];
-    const eyeColor     = EYE_COLORS[TRAITS[3].options[sel.eyeColor ?? 0]];
-    const topOpt       = TRAITS[4].options[sel.top ?? 0];
-    const topColor     = TOP_COLORS[TRAITS[5].options[sel.topColor ?? 0]];
-    const bottomOpt    = TRAITS[6].options[sel.bottom ?? 0];
+    const hairStyleOpt = TRAITS[0].options[sel['hairStyle'] ?? 0];
+    const hairColor    = HAIR_COLORS[TRAITS[1].options[sel['hairColor'] ?? 0]];
+    const skinColor    = SKIN_TONES[TRAITS[2].options[sel['skinTone'] ?? 0]];
+    const eyeColor     = EYE_COLORS[TRAITS[3].options[sel['eyeColor'] ?? 0]];
+    const topOpt       = TRAITS[4].options[sel['top'] ?? 0];
+    const topColor     = TOP_COLORS[TRAITS[5].options[sel['topColor'] ?? 0]];
+    const bottomOpt    = TRAITS[6].options[sel['bottom'] ?? 0];
     const bottomColor  = BOTTOM_COLORS[bottomOpt];
-    const accessoryOpt = TRAITS[7].options[sel.accessory ?? 0];
+    const accessoryOpt = TRAITS[7].options[sel['accessory'] ?? 0];
 
-    // Character's hips rest on top of the seat cushion
-    const hipY    = seatY + 4;
-    const thighW  = 52;
-    const thighH  = 25;
-    const calfW   = 22;
-    const calfH   = 62;
+    const hipY   = seatY + 4;
+    const thighW = 52;
+    const thighH = 25;
+    const calfW  = 22;
+    const calfH  = 62;
 
     // ── Sitting legs ───────────────────────────────────────────────────────────
     g.fillStyle(bottomColor);
 
     if (bottomOpt === 'Skirt') {
-      // Skirt fans out across the seat
       g.fillRect(cx - 55, hipY - 25, 110, 30);
       g.fillTriangle(
         cx - 55, hipY + 5,
@@ -440,36 +434,28 @@ export class LivingRoomScene extends Phaser.Scene {
         cx + 55, hipY + 5,
         cx + 65, hipY + 52
       );
-      // Bare lower legs
       g.fillStyle(skinColor);
       g.fillRect(cx - 58, hipY + 50, calfW, calfH - 12);
       g.fillRect(cx + 36, hipY + 50, calfW, calfH - 12);
-      // Shoes
       g.fillStyle(0x333333);
       g.fillEllipse(cx - 47, hipY + 102, 30, 12);
       g.fillEllipse(cx + 47, hipY + 102, 30, 12);
 
     } else if (bottomOpt === 'Shorts') {
-      // Short thighs visible
       g.fillRect(cx - thighW - 12, hipY, thighW, thighH);
       g.fillRect(cx + 12,          hipY, thighW, thighH);
-      // Bare lower legs (skin)
       g.fillStyle(skinColor);
       g.fillRect(cx - thighW - 1,  hipY + thighH, calfW, calfH);
       g.fillRect(cx + thighW - 10, hipY + thighH, calfW, calfH);
-      // Shoes
       g.fillStyle(0x333333);
       g.fillEllipse(cx - thighW + 10, hipY + thighH + calfH + 8, 30, 13);
       g.fillEllipse(cx + thighW + 12, hipY + thighH + calfH + 8, 30, 13);
 
     } else {
-      // Jeans / Leggings – full leg
       g.fillRect(cx - thighW - 12, hipY, thighW, thighH);
       g.fillRect(cx + 12,          hipY, thighW, thighH);
-      // Calves
       g.fillRect(cx - thighW - 1,  hipY + thighH, calfW, calfH);
       g.fillRect(cx + thighW - 10, hipY + thighH, calfW, calfH);
-      // Shoes
       g.fillStyle(0x333333);
       g.fillEllipse(cx - thighW + 10, hipY + thighH + calfH + 8, 30, 13);
       g.fillEllipse(cx + thighW + 12, hipY + thighH + calfH + 8, 30, 13);
@@ -486,7 +472,6 @@ export class LivingRoomScene extends Phaser.Scene {
       g.fillRect(cx - 28, torsoTop, 56, torsoH);
     }
 
-    // Hoodie / Jacket details
     if (topOpt === 'Hoodie') {
       g.fillStyle(Phaser.Display.Color.ValueToColor(topColor).darken(20).color);
       g.fillRect(cx - 4, torsoTop, 8, 60);
@@ -496,12 +481,11 @@ export class LivingRoomScene extends Phaser.Scene {
       g.fillRect(cx + 18, torsoTop, 10, 80);
     }
 
-    // ── Arms (resting at sides / on armrests) ─────────────────────────────────
+    // ── Arms ──────────────────────────────────────────────────────────────────
     g.fillStyle(topColor);
-    g.fillRect(cx - 52, torsoTop + 5, 22, 58); // left arm
-    g.fillRect(cx + 30, torsoTop + 5, 22, 58); // right arm
+    g.fillRect(cx - 52, torsoTop + 5, 22, 58);
+    g.fillRect(cx + 30, torsoTop + 5, 22, 58);
 
-    // Hands
     g.fillStyle(skinColor);
     g.fillEllipse(cx - 41, torsoTop + 68, 18, 20);
     g.fillEllipse(cx + 41, torsoTop + 68, 18, 20);
@@ -512,10 +496,9 @@ export class LivingRoomScene extends Phaser.Scene {
 
     // ── Head ──────────────────────────────────────────────────────────────────
     g.fillStyle(skinColor);
-    const headCY = torsoTop - 56; // head centre Y
+    const headCY = torsoTop - 56;
     g.fillEllipse(cx, headCY, 80, 90);
 
-    // Eyes
     g.fillStyle(0xffffff);
     g.fillEllipse(cx - 18, headCY - 5, 20, 14);
     g.fillEllipse(cx + 18, headCY - 5, 20, 14);
@@ -526,23 +509,18 @@ export class LivingRoomScene extends Phaser.Scene {
     g.fillCircle(cx - 18, headCY - 5, 3);
     g.fillCircle(cx + 18, headCY - 5, 3);
 
-    // Mouth (relaxed smile)
     g.fillStyle(0xcc5555);
     g.fillEllipse(cx, headCY + 15, 22, 10);
 
-    // Nose
     const noseDark = Phaser.Display.Color.ValueToColor(skinColor).darken(15).color;
     g.fillStyle(noseDark);
     g.fillTriangle(cx - 5, headCY + 5, cx + 5, headCY + 5, cx, headCY + 15);
 
     // ── Hair ──────────────────────────────────────────────────────────────────
-    // Reuse the same offsets as the standing character by converting headCY back
-    // to the feet-level baseY coordinate system that _drawHair uses.
     this._drawHair(g, hairStyleOpt, cx, headCY + HEAD_TO_BASE_OFFSET, hairColor);
 
     // ── Accessories ───────────────────────────────────────────────────────────
     if (accessoryOpt === 'Hat' || accessoryOpt === 'Hat + Glasses') {
-      // Hat brim at head top (headCY − 45)
       ag.fillStyle(0x5a3a1a);
       ag.fillEllipse(cx, headCY - 45, 96, 18);
       ag.fillRect(cx - 36, headCY - 87, 72, 42);
@@ -570,10 +548,10 @@ export class LivingRoomScene extends Phaser.Scene {
   }
 
   // ---------------------------------------------------------------------------
-  // Hair drawing – identical logic to CharacterSelectScene._drawHair so that
-  // styles match exactly.  Pass (headCY + 265) as baseY to keep offsets consistent.
+  // Hair drawing – identical logic to CharacterSelectScene._drawHair.
+  // Pass (headCY + 265) as baseY to keep offsets consistent.
   // ---------------------------------------------------------------------------
-  _drawHair(g, style, cx, baseY, color) {
+  private _drawHair(g: Phaser.GameObjects.Graphics, style: string, cx: number, baseY: number, color: number): void {
     g.fillStyle(color);
     switch (style) {
       case 'Short':
