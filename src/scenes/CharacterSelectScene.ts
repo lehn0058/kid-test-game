@@ -1,9 +1,15 @@
-/* global Phaser */
+import Phaser from 'phaser';
 
 // ---------------------------------------------------------------------------
 // Character customisation options (8 traits)
 // ---------------------------------------------------------------------------
-export const TRAITS = [
+export interface Trait {
+  key: string;
+  label: string;
+  options: string[];
+}
+
+export const TRAITS: Trait[] = [
   {
     key: 'hairStyle',
     label: 'Hair Style',
@@ -49,35 +55,35 @@ export const TRAITS = [
 // ---------------------------------------------------------------------------
 // Color maps
 // ---------------------------------------------------------------------------
-export const HAIR_COLORS = {
+export const HAIR_COLORS: Record<string, number> = {
   Blonde: 0xffd700,
   Brown: 0x8b4513,
   Black: 0x1a1a1a,
   Red: 0xcc2200,
 };
 
-export const SKIN_TONES = {
+export const SKIN_TONES: Record<string, number> = {
   Light: 0xffe0bd,
   Medium: 0xd4a574,
   Tan: 0xc68642,
   Dark: 0x7c4a1e,
 };
 
-export const EYE_COLORS = {
+export const EYE_COLORS: Record<string, number> = {
   Blue: 0x4169e1,
   Brown: 0x6b3a2a,
   Green: 0x228b22,
   Gray: 0x808080,
 };
 
-export const TOP_COLORS = {
+export const TOP_COLORS: Record<string, number> = {
   Red: 0xe03c3c,
   Blue: 0x3c6ee0,
   Green: 0x3cb84a,
   Yellow: 0xe0c03c,
 };
 
-export const BOTTOM_COLORS = {
+export const BOTTOM_COLORS: Record<string, number> = {
   Jeans: 0x4a6fa5,
   Shorts: 0x8b6914,
   Skirt: 0xd4649a,
@@ -97,19 +103,23 @@ const MOBILE_BTN_MARGIN = 60;    // px – bottom margin above the Start button
 // Scene
 // ---------------------------------------------------------------------------
 export class CharacterSelectScene extends Phaser.Scene {
+  private _selections: Record<string, number> = {};
+  private _characterGraphics!: Phaser.GameObjects.Graphics;
+  private _accessoryGraphics!: Phaser.GameObjects.Graphics;
+  private _optionLabels: Phaser.GameObjects.Text[] = [];
+  private _swatches: Record<string, Phaser.GameObjects.Rectangle> = {};
+
   constructor() {
     super({ key: 'CharacterSelectScene' });
   }
 
-  create() {
-    // Track current index for each trait
-    this._selections = {};
+  create(): void {
     TRAITS.forEach((t) => {
       this._selections[t.key] = 0;
     });
 
     // Restore selections saved before a resize-restart
-    const saved = this.registry.get('_selections');
+    const saved = this.registry.get('_selections') as Record<string, number> | undefined;
     if (saved) {
       this._selections = saved;
       this.registry.remove('_selections');
@@ -122,8 +132,8 @@ export class CharacterSelectScene extends Phaser.Scene {
     this._drawCharacter();
 
     // Rebuild UI when viewport changes (mobile browser chrome show/hide)
-    let resizeTimer = null;
-    const onResize = () => {
+    let resizeTimer: Phaser.Time.TimerEvent | null = null;
+    const onResize = (): void => {
       if (resizeTimer !== null) {
         resizeTimer.remove(false);
         resizeTimer = null;
@@ -141,7 +151,7 @@ export class CharacterSelectScene extends Phaser.Scene {
   // -------------------------------------------------------------------------
   // UI
   // -------------------------------------------------------------------------
-  _buildUI() {
+  private _buildUI(): void {
     const W = this.scale.width;
     const H = this.scale.height;
     const isMobile = W < MOBILE_BREAKPOINT;
@@ -214,8 +224,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     btn.on('pointerdown', () => this._onStartGame());
   }
 
-  _buildTraitRow(trait, traitIndex, x, y, rowWidth = 370) {
-
+  private _buildTraitRow(trait: Trait, traitIndex: number, x: number, y: number, rowWidth = 370): void {
     // Trait label
     this.add.text(x + 8, y + 8, trait.label, {
       fontSize: '13px',
@@ -278,8 +287,6 @@ export class CharacterSelectScene extends Phaser.Scene {
       this._cycleOption(traitIndex, 1)
     );
 
-    // Store label reference so we can update it
-    if (!this._optionLabels) this._optionLabels = [];
     this._optionLabels[traitIndex] = optLabel;
 
     // Color swatch (shown for color traits)
@@ -288,32 +295,27 @@ export class CharacterSelectScene extends Phaser.Scene {
       trait.key === 'topColor' ||
       trait.key === 'eyeColor'
     ) {
-      const swatch = this.add.rectangle(
+      this._swatches[trait.key] = this.add.rectangle(
         x + rowWidth - 50,
         y + 36,
         16,
         16,
         this._swatchColor(trait, 0)
       );
-      if (!this._swatches) this._swatches = {};
-      this._swatches[trait.key] = swatch;
     }
   }
 
-  _swatchColor(trait, idx) {
-    if (trait.key === 'hairColor')
-      return HAIR_COLORS[trait.options[idx]];
-    if (trait.key === 'topColor')
-      return TOP_COLORS[trait.options[idx]];
-    if (trait.key === 'eyeColor')
-      return EYE_COLORS[trait.options[idx]];
+  private _swatchColor(trait: Trait, idx: number): number {
+    if (trait.key === 'hairColor') return HAIR_COLORS[trait.options[idx]] ?? 0xffffff;
+    if (trait.key === 'topColor')  return TOP_COLORS[trait.options[idx]]  ?? 0xffffff;
+    if (trait.key === 'eyeColor')  return EYE_COLORS[trait.options[idx]]  ?? 0xffffff;
     return 0xffffff;
   }
 
   // -------------------------------------------------------------------------
   // Option cycling
   // -------------------------------------------------------------------------
-  _cycleOption(traitIndex, direction) {
+  private _cycleOption(traitIndex: number, direction: number): void {
     const trait = TRAITS[traitIndex];
     const len = trait.options.length;
     this._selections[trait.key] =
@@ -322,8 +324,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     const idx = this._selections[trait.key];
     this._optionLabels[traitIndex].setText(trait.options[idx]);
 
-    // Update color swatch if applicable
-    if (this._swatches && this._swatches[trait.key]) {
+    if (this._swatches[trait.key]) {
       this._swatches[trait.key].setFillStyle(
         this._swatchColor(trait, idx)
       );
@@ -335,7 +336,7 @@ export class CharacterSelectScene extends Phaser.Scene {
   // -------------------------------------------------------------------------
   // Character drawing
   // -------------------------------------------------------------------------
-  _drawCharacter() {
+  private _drawCharacter(): void {
     const g = this._characterGraphics;
     const ag = this._accessoryGraphics;
     g.clear();
@@ -343,28 +344,25 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     const sel = this._selections;
 
-    // Resolved values
-    const hairStyleOpt = TRAITS[0].options[sel.hairStyle];
-    const hairColor = HAIR_COLORS[TRAITS[1].options[sel.hairColor]];
-    const skinColor = SKIN_TONES[TRAITS[2].options[sel.skinTone]];
-    const eyeColor = EYE_COLORS[TRAITS[3].options[sel.eyeColor]];
-    const topOpt = TRAITS[4].options[sel.top];
-    const topColor = TOP_COLORS[TRAITS[5].options[sel.topColor]];
-    const bottomOpt = TRAITS[6].options[sel.bottom];
-    const bottomColor = BOTTOM_COLORS[bottomOpt];
-    const accessoryOpt = TRAITS[7].options[sel.accessory];
+    const hairStyleOpt = TRAITS[0].options[sel['hairStyle']];
+    const hairColor    = HAIR_COLORS[TRAITS[1].options[sel['hairColor']]];
+    const skinColor    = SKIN_TONES[TRAITS[2].options[sel['skinTone']]];
+    const eyeColor     = EYE_COLORS[TRAITS[3].options[sel['eyeColor']]];
+    const topOpt       = TRAITS[4].options[sel['top']];
+    const topColor     = TOP_COLORS[TRAITS[5].options[sel['topColor']]];
+    const bottomOpt    = TRAITS[6].options[sel['bottom']];
+    const bottomColor  = BOTTOM_COLORS[bottomOpt];
+    const accessoryOpt = TRAITS[7].options[sel['accessory']];
 
     const W = this.scale.width;
     const H = this.scale.height;
     const isMobile = W < MOBILE_BREAKPOINT;
 
-    // Character centre – placed responsively
     const cx = isMobile ? W / 2 : 400;
-    // On mobile, draw character below the trait rows
     const mobileTrailsBottom = MOBILE_ROW_START_Y + TRAITS.length * MOBILE_ROW_HEIGHT;
     const baseY = isMobile
       ? Math.min(H - MOBILE_BTN_MARGIN, mobileTrailsBottom + MOBILE_CHAR_HEIGHT)
-      : 480; // feet level
+      : 480;
 
     // --- Shoes ---
     g.fillStyle(0x333333);
@@ -378,23 +376,16 @@ export class CharacterSelectScene extends Phaser.Scene {
       g.fillRect(cx + 2, baseY - 120, 22, 40);
     } else if (bottomOpt === 'Skirt') {
       g.fillTriangle(
-        cx - 28,
-        baseY - 120,
-        cx + 28,
-        baseY - 120,
-        cx - 38,
-        baseY - 5
+        cx - 28, baseY - 120,
+        cx + 28, baseY - 120,
+        cx - 38, baseY - 5
       );
       g.fillTriangle(
-        cx - 28,
-        baseY - 120,
-        cx + 28,
-        baseY - 120,
-        cx + 38,
-        baseY - 5
+        cx - 28, baseY - 120,
+        cx + 28, baseY - 120,
+        cx + 38, baseY - 5
       );
     } else {
-      // Jeans / Leggings – full leg
       g.fillRect(cx - 24, baseY - 130, 22, 80);
       g.fillRect(cx + 2, baseY - 130, 22, 80);
     }
@@ -402,24 +393,16 @@ export class CharacterSelectScene extends Phaser.Scene {
     // --- Torso / top ---
     g.fillStyle(topColor);
     if (topOpt === 'Dress') {
-      // Dress extends down
       g.fillRect(cx - 28, baseY - 200, 56, 120);
-      // Skirt flare
       g.fillTriangle(
-        cx - 28,
-        baseY - 80,
-        cx + 28,
-        baseY - 80,
-        cx - 42,
-        baseY - 5
+        cx - 28, baseY - 80,
+        cx + 28, baseY - 80,
+        cx - 42, baseY - 5
       );
       g.fillTriangle(
-        cx - 28,
-        baseY - 80,
-        cx + 28,
-        baseY - 80,
-        cx + 42,
-        baseY - 5
+        cx - 28, baseY - 80,
+        cx + 28, baseY - 80,
+        cx + 42, baseY - 5
       );
     } else {
       g.fillRect(cx - 28, baseY - 200, 56, 80);
@@ -428,22 +411,22 @@ export class CharacterSelectScene extends Phaser.Scene {
     // Hoodie / Jacket details
     if (topOpt === 'Hoodie') {
       g.fillStyle(Phaser.Display.Color.ValueToColor(topColor).darken(20).color);
-      g.fillRect(cx - 4, baseY - 200, 8, 60); // zip line
+      g.fillRect(cx - 4, baseY - 200, 8, 60);
     } else if (topOpt === 'Jacket') {
       g.fillStyle(Phaser.Display.Color.ValueToColor(topColor).darken(30).color);
-      g.fillRect(cx - 28, baseY - 200, 10, 80); // left lapel
-      g.fillRect(cx + 18, baseY - 200, 10, 80); // right lapel
+      g.fillRect(cx - 28, baseY - 200, 10, 80);
+      g.fillRect(cx + 18, baseY - 200, 10, 80);
     }
 
     // --- Arms ---
     g.fillStyle(topColor);
-    g.fillRect(cx - 44, baseY - 195, 18, 60); // left arm
-    g.fillRect(cx + 26, baseY - 195, 18, 60); // right arm
+    g.fillRect(cx - 44, baseY - 195, 18, 60);
+    g.fillRect(cx + 26, baseY - 195, 18, 60);
 
     // Skin on hands
     g.fillStyle(skinColor);
-    g.fillEllipse(cx - 35, baseY - 135, 18, 20); // left hand
-    g.fillEllipse(cx + 35, baseY - 135, 18, 20); // right hand
+    g.fillEllipse(cx - 35, baseY - 135, 18, 20);
+    g.fillEllipse(cx + 35, baseY - 135, 18, 20);
 
     // --- Neck ---
     g.fillStyle(skinColor);
@@ -471,7 +454,6 @@ export class CharacterSelectScene extends Phaser.Scene {
     g.fillEllipse(cx, baseY - 250, 22, 10);
 
     // --- Nose ---
-    g.fillStyle(skinColor);
     const noseDark = Phaser.Display.Color.ValueToColor(skinColor).darken(15).color;
     g.fillStyle(noseDark);
     g.fillTriangle(cx - 5, baseY - 258, cx + 5, baseY - 258, cx, baseY - 248);
@@ -482,27 +464,21 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     // --- Accessories (drawn last / on top) ---
     if (accessoryOpt === 'Hat' || accessoryOpt === 'Hat + Glasses') {
-      // Hat brim
       ag.fillStyle(0x5a3a1a);
       ag.fillEllipse(cx, baseY - 310, 96, 18);
-      // Hat crown
       ag.fillRect(cx - 36, baseY - 350, 72, 42);
-      // Hat band
       ag.fillStyle(0x331a00);
       ag.fillRect(cx - 36, baseY - 318, 72, 8);
     }
 
     if (accessoryOpt === 'Glasses' || accessoryOpt === 'Hat + Glasses') {
-      // Frames
       ag.lineStyle(3, 0x333333);
       ag.strokeCircle(cx - 18, baseY - 270, 11);
       ag.strokeCircle(cx + 18, baseY - 270, 11);
-      // Bridge
       ag.beginPath();
       ag.moveTo(cx - 7, baseY - 270);
       ag.lineTo(cx + 7, baseY - 270);
       ag.strokePath();
-      // Side arms
       ag.beginPath();
       ag.moveTo(cx - 29, baseY - 270);
       ag.lineTo(cx - 42, baseY - 268);
@@ -514,39 +490,33 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
   }
 
-  _drawHair(g, style, cx, baseY, color) {
+  _drawHair(g: Phaser.GameObjects.Graphics, style: string, cx: number, baseY: number, color: number): void {
     g.fillStyle(color);
     switch (style) {
       case 'Short':
-        // Close-cropped cap
         g.fillEllipse(cx, baseY - 295, 84, 50);
         break;
 
       case 'Long':
-        // Full cap + long strands down the sides
         g.fillEllipse(cx, baseY - 295, 84, 50);
-        g.fillRect(cx - 42, baseY - 290, 14, 90); // left strand
-        g.fillRect(cx + 28, baseY - 290, 14, 90); // right strand
+        g.fillRect(cx - 42, baseY - 290, 14, 90);
+        g.fillRect(cx + 28, baseY - 290, 14, 90);
         break;
 
       case 'Curly Short':
-        // Short curly – poofy clusters close to the head
         g.fillCircle(cx, baseY - 310, 44);
         g.fillCircle(cx - 30, baseY - 295, 26);
         g.fillCircle(cx + 30, baseY - 295, 26);
         break;
 
       case 'Curly Long':
-        // Long curly – poofy top plus curly clusters cascading down the sides
         g.fillCircle(cx, baseY - 310, 44);
         g.fillCircle(cx - 30, baseY - 295, 26);
         g.fillCircle(cx + 30, baseY - 295, 26);
-        // Left side cascading curls
         g.fillCircle(cx - 44, baseY - 270, 18);
         g.fillCircle(cx - 46, baseY - 245, 16);
         g.fillCircle(cx - 44, baseY - 222, 15);
         g.fillCircle(cx - 42, baseY - 200, 14);
-        // Right side cascading curls
         g.fillCircle(cx + 44, baseY - 270, 18);
         g.fillCircle(cx + 46, baseY - 245, 16);
         g.fillCircle(cx + 44, baseY - 222, 15);
@@ -554,18 +524,14 @@ export class CharacterSelectScene extends Phaser.Scene {
         break;
 
       case 'Spiky':
-        // Triangular spikes
         for (let i = -2; i <= 2; i++) {
           g.fillTriangle(
-            cx + i * 16 - 8,
-            baseY - 300,
-            cx + i * 16 + 8,
-            baseY - 300,
-            cx + i * 16,
-            baseY - 340
+            cx + i * 16 - 8, baseY - 300,
+            cx + i * 16 + 8, baseY - 300,
+            cx + i * 16,     baseY - 340
           );
         }
-        g.fillEllipse(cx, baseY - 295, 84, 30); // base
+        g.fillEllipse(cx, baseY - 295, 84, 30);
         break;
 
       default:
@@ -576,7 +542,7 @@ export class CharacterSelectScene extends Phaser.Scene {
   // -------------------------------------------------------------------------
   // Start button handler
   // -------------------------------------------------------------------------
-  _onStartGame() {
+  private _onStartGame(): void {
     this.scene.start('LivingRoomScene', { ...this._selections });
   }
 }

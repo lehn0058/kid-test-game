@@ -1,8 +1,8 @@
-/* global Phaser */
-import { CharacterSelectScene } from './scenes/CharacterSelectScene.js';
-import { LivingRoomScene } from './scenes/LivingRoomScene.js';
+import Phaser from 'phaser';
+import { CharacterSelectScene } from './scenes/CharacterSelectScene';
+import { LivingRoomScene } from './scenes/LivingRoomScene';
 
-const config = {
+const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.CANVAS,
   backgroundColor: '#1a1a2e',
   scene: [CharacterSelectScene, LivingRoomScene],
