@@ -1,0 +1,26 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Dev Server",
+      "runtimeExecutable": "/Users/bclehner/.nvm/versions/node/v18.16.0/bin/node",
+      "runtimeArgs": [
+        "/Users/bclehner/Documents/lehn0058/kid-test-game/.claude/worktrees/goofy-ptolemy-2623a8/node_modules/vite/bin/vite.js",
+        "--root",
+        "/Users/bclehner/Documents/lehn0058/kid-test-game/.claude/worktrees/goofy-ptolemy-2623a8"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "Preview Server",
+      "runtimeExecutable": "/Users/bclehner/.nvm/versions/node/v18.16.0/bin/node",
+      "runtimeArgs": [
+        "/Users/bclehner/Documents/lehn0058/kid-test-game/.claude/worktrees/goofy-ptolemy-2623a8/node_modules/vite/bin/vite.js",
+        "preview",
+        "--root",
+        "/Users/bclehner/Documents/lehn0058/kid-test-game/.claude/worktrees/goofy-ptolemy-2623a8"
+      ],
+      "port": 4173
+    }
+  ]
+}

@@ -94,7 +94,7 @@ export const BOTTOM_COLORS: Record<string, number> = {
 // Layout constants
 // ---------------------------------------------------------------------------
 const MOBILE_BREAKPOINT = 700;   // px – below this width use single-column layout
-const MOBILE_ROW_START_Y = 80;   // px – y position of first trait row on mobile
+const MOBILE_ROW_START_Y = 140;  // px – y position of first trait row on mobile (shifted to make room for name bar)
 const MOBILE_ROW_HEIGHT = 46;    // px – height per trait row on mobile
 const MOBILE_CHAR_HEIGHT = 310;  // px – approximate character drawing height
 const MOBILE_BTN_MARGIN = 60;    // px – bottom margin above the Start button
@@ -108,6 +108,7 @@ export class CharacterSelectScene extends Phaser.Scene {
   private _accessoryGraphics!: Phaser.GameObjects.Graphics;
   private _optionLabels: Phaser.GameObjects.Text[] = [];
   private _swatches: Record<string, Phaser.GameObjects.Rectangle> = {};
+  private _nameInput: Phaser.GameObjects.DOMElement | null = null;
 
   constructor() {
     super({ key: 'CharacterSelectScene' });
@@ -156,9 +157,43 @@ export class CharacterSelectScene extends Phaser.Scene {
     const H = this.scale.height;
     const isMobile = W < MOBILE_BREAKPOINT;
 
+    // ── Name bar ─────────────────────────────────────────────────────────────
+    this.add
+      .text(W / 2, 12, 'YOUR NAME', {
+        fontSize: '11px',
+        fontFamily: 'Arial',
+        color: '#aaaacc',
+        fontStyle: 'bold',
+        letterSpacing: 2,
+      })
+      .setOrigin(0.5);
+
+    const inputEl = document.createElement('input');
+    inputEl.type = 'text';
+    inputEl.placeholder = 'Enter your name…';
+    inputEl.maxLength = 20;
+    inputEl.value = localStorage.getItem('kid-game-player-name') ?? '';
+    inputEl.style.cssText = [
+      'width:220px',
+      'padding:5px 14px',
+      'border-radius:20px',
+      'border:2px solid #7a5fc0',
+      'background:#1a1a3e',
+      'color:#ffffff',
+      'font-size:16px',
+      'font-family:Arial,sans-serif',
+      'outline:none',
+      'text-align:center',
+      'box-sizing:border-box',
+    ].join(';');
+    inputEl.addEventListener('input', () => {
+      localStorage.setItem('kid-game-player-name', inputEl.value);
+    });
+    this._nameInput = this.add.dom(W / 2, 38, inputEl);
+
     // Title
     this.add
-      .text(W / 2, 28, 'Create Your Character', {
+      .text(W / 2, 82, 'Create Your Character', {
         fontSize: isMobile ? '22px' : '26px',
         fontFamily: 'Arial',
         color: '#ffffff',
@@ -168,7 +203,7 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     // Subtitle
     this.add
-      .text(W / 2, 58, 'Customise 8 traits and watch your character update!', {
+      .text(W / 2, 112, 'Customise 8 traits and watch your character update!', {
         fontSize: '13px',
         fontFamily: 'Arial',
         color: '#aaaacc',
@@ -191,7 +226,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       });
     } else {
       // Desktop: two columns of 4
-      const rowStartY = 100;
+      const rowStartY = 154;
       const rowHeight = 58;
       const colX = [20, 420]; // left / right column x
 
@@ -543,6 +578,11 @@ export class CharacterSelectScene extends Phaser.Scene {
   // Start button handler
   // -------------------------------------------------------------------------
   private _onStartGame(): void {
-    this.scene.start('LivingRoomScene', { ...this._selections });
+    const name =
+      ((this._nameInput?.node as HTMLInputElement | undefined)?.value ?? '').trim() ||
+      localStorage.getItem('kid-game-player-name') ||
+      'Player';
+    localStorage.setItem('kid-game-player-name', name);
+    this.scene.start('LivingRoomScene', { ...this._selections, playerName: name });
   }
 }
