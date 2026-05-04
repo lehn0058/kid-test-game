@@ -28,6 +28,9 @@ const config: Phaser.Types.Core.GameConfig = {
   input: {
     activePointers: 3,
   },
+  dom: {
+    createContainer: true,
+  },
 };
 
 new Phaser.Game(config);
